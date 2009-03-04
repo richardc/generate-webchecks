@@ -1,0 +1,6 @@
+[groups::]
+web01   = 10.6.100.161, 10.6.100.162, 10.7.100.161
+
+[check::web01 /photos/]
+group = web01
+command = /usr/lib/nagios/plugins/check_http -I %s -H www.somesite.co.uk -u /photos/ -s "Photos"

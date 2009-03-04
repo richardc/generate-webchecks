@@ -1,0 +1,17 @@
+command {
+  command_name check_arbitrary_webcheck
+  command_line $ARG1$
+}
+
+[% FOR check IN checks %]
+####### [% check.name %]
+  [% FOR host IN check.hosts %]
+    
+define service {
+  host_name            [% monitoring_host %]
+  service_description  [% host %] [% check.name %]
+  check_command        check_arbitrary_webcheck![% sprintf( check.command, host ) %]
+  use                  generic-service
+}
+  [%- END -%]
+[%- END %]
