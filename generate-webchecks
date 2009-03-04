@@ -8,7 +8,7 @@ use File::Basename;
 use Template;
 
 GetOptions(
-  "c|config=s"   => \( my $configfile = 'config' ),
+  "c|config=s"   => \( my $configfile = 'webchecks.ini' ),
   "d|debug"      => \( my $debug = 0 ),
   "t|template=s" => \( my $template = 'nagios-webchecks.tt'),
 );
