@@ -1,4 +1,31 @@
 #!/usr/bin/perl
+
+package Check;
+use Moose;
+use Moose::Util::TypeConstraints;
+
+subtype 'StrList'
+  => as 'ArrayRef[Str]';
+coerce  'StrList'
+  => from 'Str' => via { [ split /[, ]+/ ] };
+
+has 'command' => (
+    is => 'rw',
+    isa => 'Str',
+    required => 1,
+);
+has 'group' => (
+    is => 'rw',
+    isa => 'StrList',
+    coerce => 1,
+    required => 1,
+);
+__PACKAGE__->meta->make_immutable;
+no Moose;
+no Moose::Util::TypeConstraints;
+
+package main;
+
 use strict;
 use warnings;
 use Config::Tiny;
@@ -45,12 +72,15 @@ sub get_configs {
 
     $name =~ s/^check:://;
     $check->{name} = $name;
+
+    # Moose it
+    $check = Check->new( $check );
     push @checks, $check;
     
     # expand group in to array
-    for my $group ( $check->{group} ) {
-      $group = [ split /[, ]+/, $group ];
-    }
+#    for my $group ( $check->{group} ) {
+#      $group = [ split /[, ]+/, $group ];
+#    }
 
     # create expanded host key under the check based on the groups
     $check->{hosts} = [ map {
@@ -61,3 +91,6 @@ sub get_configs {
   print Dumper \@checks if $debug; print "\n" if $debug;
   return \@checks;
 }
+
+
+
