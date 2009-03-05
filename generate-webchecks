@@ -48,7 +48,7 @@ package main;
 use strict;
 use warnings;
 use Config::Tiny;
-use Data::Dumper;
+use YAML;
 use Getopt::Long;
 use File::Basename;
 use Template;
@@ -79,7 +79,7 @@ sub get_configs {
   $config = Config::Tiny->read( $configfile )
     || die "Failed to open [$configfile]: $Config::Tiny::errstr\n";
 
-  print Dumper $config if $debug;
+  print Dump $config if $debug;
   my %parsed;
 
   for my $group ( sort grep { /^group::/ } keys %$config ) {
@@ -93,7 +93,8 @@ sub get_configs {
     $parsed{check}{ $check->name } = $check;
   }
   
-  print Dumper \%parsed if $debug;
+  
+  print Dump \%parsed if $debug;
   return \%parsed;
 }
 
