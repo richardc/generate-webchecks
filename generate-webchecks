@@ -14,6 +14,8 @@ use Moose;
 
 has 'group' => ( is => 'rw', isa => 'HashRef[Group]', required => 1 );
 has 'check' => ( is => 'rw', isa => 'HashRef[Check]', required => 1 );
+__PACKAGE__->meta->make_immutable;
+no Moose;
 
 sub groups {
     my $self = shift;
@@ -25,8 +27,6 @@ sub checks {
     return [ values %{ $self->check } ];
 }
 
-__PACKAGE__->meta->make_immutable;
-no Moose;
 
 package Check;
 use Moose;
@@ -54,6 +54,7 @@ sub hosts {
 
 package Group;
 use Moose;
+
 has 'name'    => ( is => 'ro', isa => 'Str', required => 1 );
 has 'config'  => ( is => 'ro', isa => 'Config', required => 1 );
 has hosts => (
@@ -62,7 +63,6 @@ has hosts => (
     coerce   => 1,
     required => 1,
 );
-
 __PACKAGE__->meta->make_immutable;
 no Moose;
 
