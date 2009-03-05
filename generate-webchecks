@@ -96,6 +96,7 @@ GetOptions(
 );
 
 my $config = MyConfig->new->load( $configfile );
+print Dump $config if $debug;
 
 my $tt = Template->new();
 
