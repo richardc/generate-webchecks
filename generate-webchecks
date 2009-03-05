@@ -1,63 +1,111 @@
 #!/usr/bin/env perl
+
+BEGIN {
+$INC{'Types.pm'} = 1;  # hack around having everything in one file
+
+package Types;
+use MooseX::Types -declare => [qw( StrList )];
+use MooseX::Types::Moose 'Str';
+
+subtype StrList, as 'ArrayRef[Str]';
+coerce  StrList, from Str, via { [ split /[, ]+/ ] };
+}
+
+use MooseX::Declare;
+class MyConfig {
+    use MooseX::StrictConstructor;
+    has 'group' => ( is => 'rw', isa => 'HashRef[Group]', default => sub { {} } );
+    has 'check' => ( is => 'rw', isa => 'HashRef[Check]', default => sub { {} } );
+
+    method groups { [ values %{ $self->group } ] }
+    method checks { [ values %{ $self->check } ] }
+
+    method load ($configfile) {
+        my $config = Config::Tiny->read( $configfile )
+            || die "Failed to open [$configfile]: $Config::Tiny::errstr\n";
+
+        for my $section ( keys %$config ) {
+            my ($type, $name) = split /::/, $section, 2;
+            my $class = ucfirst $type;
+            my $object = $class->new( {
+                %{ $config->{$section} },
+                name   => $name,
+                config => $self,
+            } );
+            $self->$type()->{$name} = $object;
+        }
+        return $self;
+    }
+}
+
+class Section {
+    use MooseX::StrictConstructor;
+    has 'name'    => ( is => 'ro', isa => 'Str', required => 1 );
+    has 'config'  => ( is => 'ro', isa => 'MyConfig', required => 1 );
+}
+
+class Check extends Section {
+    use MooseX::StrictConstructor;
+    use Types ':all';
+    
+    has 'command' => ( is => 'rw', isa => 'Str', required => 1 );
+    has 'group' => (
+        is       => 'rw',
+        isa      => StrList,
+        coerce   => 1,
+        required => 1,
+    );
+
+    method groups {
+        return [ map { $self->config->group->{$_} } @{ $self->group }];
+    }
+    method hosts {
+        return [ map { @{ $_->hosts } } @{ $self->groups } ];
+    }
+}
+
+class Group extends Section {
+    use MooseX::StrictConstructor;
+    use Types ':all';
+
+    has hosts => (
+        is       => 'rw',
+        isa      => StrList,
+        coerce   => 1,
+        required => 1,
+    );
+}
+no MooseX::Declare;
+
+
+
+package main;
+
 use strict;
 use warnings;
 use Config::Tiny;
-use Data::Dumper;
+use YAML;
 use Getopt::Long;
 use File::Basename;
 use Template;
 
 GetOptions(
-  "c|config=s"   => \( my $configfile = 'webchecks.ini' ),
-  "d|debug"      => \( my $debug = 0 ),
-  "t|template=s" => \( my $template = 'nagios-webchecks.tt'),
+    "c|config=s"   => \( my $configfile = 'webchecks.ini' ),
+    "d|debug"      => \( my $debug = 0 ),
+    "t|template=s" => \( my $template = 'nagios-webchecks.tt'),
 );
 
-my $checks = get_configs();
+my $config = MyConfig->new->load( $configfile );
+print Dump $config if $debug;
 
 my $tt = Template->new();
 
-$tt->process( $template, { checks => $checks, sprintf => \&my_sprintf } )
-  || die $tt->error();
-
-#####################################################
+$tt->process( $template, { 
+    checks => $config->checks, sprintf => \&my_sprintf,
+} ) || die $tt->error();
 
 sub my_sprintf {
    my ($format, @args) = @_;
    return sprintf $format, @args;
 }
 
-sub get_configs {
-  my $config = Config::Tiny->new();
-  $config = Config::Tiny->read( $configfile )
-    || die "Failed to open [$configfile]: $Config::Tiny::errstr\n";
-
-  print Dumper $config if $debug; print "\n" if $debug;
-
-  # expand groups in to arrays - uses implict aliasing
-  for my $group ( values %{ $config->{'groups::'} } ) {
-    $group = [ split /[, ]+/, $group ];
-  }
-
-  my @checks;
-  for my $name ( sort grep { /^check::/ } keys %$config ) {
-    my $check = $config->{$name};
-
-    $name =~ s/^check:://;
-    $check->{name} = $name;
-    push @checks, $check;
-    
-    # expand group in to array
-    for my $group ( $check->{group} ) {
-      $group = [ split /[, ]+/, $group ];
-    }
-
-    # create expanded host key under the check based on the groups
-    $check->{hosts} = [ map {
-       @{ $config->{'groups::'}{$_} || [] } 
-    } @{ $check->{group} } ];
-  }
-
-  print Dumper \@checks if $debug; print "\n" if $debug;
-  return \@checks;
-}
