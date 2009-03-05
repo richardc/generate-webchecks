@@ -9,6 +9,7 @@ coerce  'StrList'
     => from 'Str' => via { [ split /[, ]+/ ] };
 no Moose::Util::TypeConstraints;
 
+
 package Config;
 use Moose;
 
@@ -28,11 +29,16 @@ sub checks {
 }
 
 
-package Check;
+package Section;
 use Moose;
-
 has 'name'    => ( is => 'ro', isa => 'Str', required => 1 );
 has 'config'  => ( is => 'ro', isa => 'Config', required => 1 );
+__PACKAGE__->meta->make_immutable;
+no Moose;
+
+package Check;
+use Moose;
+extends 'Section';
 has 'command' => ( is => 'rw', isa => 'Str', required => 1 );
 has 'group' => (
     is       => 'rw',
@@ -54,9 +60,7 @@ sub hosts {
 
 package Group;
 use Moose;
-
-has 'name'    => ( is => 'ro', isa => 'Str', required => 1 );
-has 'config'  => ( is => 'ro', isa => 'Config', required => 1 );
+extends 'Section';
 has hosts => (
     is       => 'rw',
     isa      => 'StrList',
