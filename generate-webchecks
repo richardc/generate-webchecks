@@ -1,14 +1,15 @@
 #!/usr/bin/perl
 
+BEGIN {
+$INC{'Types.pm'} = 1;  # hack around having everything in one file
+
 package Types;
-use Moose::Util::TypeConstraints;
+use MooseX::Types -declare => [qw( StrList )];
+use MooseX::Types::Moose 'Str';
 
-subtype 'StrList'
-    => as 'ArrayRef[Str]';
-coerce  'StrList'
-    => from 'Str' => via { [ split /[, ]+/ ] };
-no Moose::Util::TypeConstraints;
-
+subtype StrList, as 'ArrayRef[Str]';
+coerce  StrList, from Str, via { [ split /[, ]+/ ] };
+}
 
 package Config;
 use Moose;
@@ -61,11 +62,13 @@ no Moose;
 package Check;
 use Moose;
 use MooseX::StrictConstructor;
+use Types ':all';
+
 extends 'Section';
 has 'command' => ( is => 'rw', isa => 'Str', required => 1 );
 has 'group' => (
     is       => 'rw',
-    isa      => 'StrList',
+    isa      => StrList,
     coerce   => 1,
     required => 1,
 );
@@ -84,10 +87,12 @@ sub hosts {
 package Group;
 use Moose;
 use MooseX::StrictConstructor;
+use Types ':all';
+
 extends 'Section';
 has hosts => (
     is       => 'rw',
-    isa      => 'StrList',
+    isa      => StrList,
     coerce   => 1,
     required => 1,
 );
