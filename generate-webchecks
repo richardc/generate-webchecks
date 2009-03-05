@@ -1,28 +1,47 @@
 #!/usr/bin/perl
 
-package Check;
-use Moose;
+package Types;
 use Moose::Util::TypeConstraints;
 
 subtype 'StrList'
   => as 'ArrayRef[Str]';
 coerce  'StrList'
   => from 'Str' => via { [ split /[, ]+/ ] };
+no Moose::Util::TypeConstraints;
 
-has 'command' => (
-    is => 'rw',
-    isa => 'Str',
-    required => 1,
-);
+
+package Check;
+use Moose;
+
+has 'name'    => ( is => 'rw', isa => 'Str', required => 1 );
+has 'command' => ( is => 'rw', isa => 'Str', required => 1 );
 has 'group' => (
-    is => 'rw',
-    isa => 'StrList',
-    coerce => 1,
+    is       => 'rw',
+    isa      => 'StrList',
+    coerce   => 1,
     required => 1,
 );
 __PACKAGE__->meta->make_immutable;
 no Moose;
-no Moose::Util::TypeConstraints;
+
+sub hosts {
+    my $self = shift;
+    return [ map { @{ $_->hosts } } @{ $self->group } ];
+}
+
+package Group;
+use Moose;
+has 'name' => ( is => 'rw', isa => 'Str', required => 1 );
+has hosts => (
+    is       => 'rw',
+    isa      => 'StrList',
+    coerce   => 1,
+    required => 1,
+);
+
+__PACKAGE__->meta->make_immutable;
+no Moose;
+
 
 package main;
 
@@ -40,11 +59,12 @@ GetOptions(
   "t|template=s" => \( my $template = 'nagios-webchecks.tt'),
 );
 
-my $checks = get_configs();
+my $config = get_configs();
 
 my $tt = Template->new();
 
-$tt->process( $template, { checks => $checks, sprintf => \&my_sprintf } )
+$tt->process( $template, { checks => [ values %{ $config->{checks} } ],
+    sprintf => \&my_sprintf } )
   || die $tt->error();
 
 #####################################################
@@ -59,37 +79,22 @@ sub get_configs {
   $config = Config::Tiny->read( $configfile )
     || die "Failed to open [$configfile]: $Config::Tiny::errstr\n";
 
-  print Dumper $config if $debug; print "\n" if $debug;
+  print Dumper $config if $debug;
+  my %parsed;
 
-  # expand groups in to arrays - uses implict aliasing
-  for my $group ( values %{ $config->{'groups::'} } ) {
-    $group = [ split /[, ]+/, $group ];
+  for my $group ( sort grep { /^group::/ } keys %$config ) {
+      $group =~ m{^group::(.*)};
+      my $obj = Group->new( { %{ $config->{$group} }, name => $1 } );
+      $parsed{group}{ $obj->name } = $obj;
   }
-
-  my @checks;
   for my $name ( sort grep { /^check::/ } keys %$config ) {
-    my $check = $config->{$name};
-
-    $name =~ s/^check:://;
-    $check->{name} = $name;
-
-    # Moose it
-    $check = Check->new( $check );
-    push @checks, $check;
-    
-    # expand group in to array
-#    for my $group ( $check->{group} ) {
-#      $group = [ split /[, ]+/, $group ];
-#    }
-
-    # create expanded host key under the check based on the groups
-    $check->{hosts} = [ map {
-       @{ $config->{'groups::'}{$_} || [] } 
-    } @{ $check->{group} } ];
+    $name =~ m{^check::(.*)};
+    my $check = Check->new( { %{ $config->{$name} }, name => $1 } );
+    $parsed{check}{ $check->name } = $check;
   }
-
-  print Dumper \@checks if $debug; print "\n" if $debug;
-  return \@checks;
+  
+  print Dumper \%parsed if $debug;
+  return \%parsed;
 }
 
 
