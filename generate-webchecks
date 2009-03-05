@@ -4,16 +4,35 @@ package Types;
 use Moose::Util::TypeConstraints;
 
 subtype 'StrList'
-  => as 'ArrayRef[Str]';
+    => as 'ArrayRef[Str]';
 coerce  'StrList'
-  => from 'Str' => via { [ split /[, ]+/ ] };
+    => from 'Str' => via { [ split /[, ]+/ ] };
 no Moose::Util::TypeConstraints;
 
+package Config;
+use Moose;
+
+has 'group' => ( is => 'rw', isa => 'HashRef[Group]', required => 1 );
+has 'check' => ( is => 'rw', isa => 'HashRef[Check]', required => 1 );
+
+sub groups {
+    my $self = shift;
+    return [ values %{ $self->group } ];
+}
+
+sub checks {
+    my $self = shift;
+    return [ values %{ $self->check } ];
+}
+
+__PACKAGE__->meta->make_immutable;
+no Moose;
 
 package Check;
 use Moose;
 
-has 'name'    => ( is => 'rw', isa => 'Str', required => 1 );
+has 'name'    => ( is => 'ro', isa => 'Str', required => 1 );
+has 'config'  => ( is => 'ro', isa => 'Config', required => 1 );
 has 'command' => ( is => 'rw', isa => 'Str', required => 1 );
 has 'group' => (
     is       => 'rw',
@@ -24,14 +43,19 @@ has 'group' => (
 __PACKAGE__->meta->make_immutable;
 no Moose;
 
+sub groups {
+    my $self = shift;
+    return [ map { $self->config->group->{$_} } @{ $self->group }]
+}
 sub hosts {
     my $self = shift;
-    return [ map { @{ $_->hosts } } @{ $self->group } ];
+    return [ map { @{ $_->hosts } } @{ $self->groups } ];
 }
 
 package Group;
 use Moose;
-has 'name' => ( is => 'rw', isa => 'Str', required => 1 );
+has 'name'    => ( is => 'ro', isa => 'Str', required => 1 );
+has 'config'  => ( is => 'ro', isa => 'Config', required => 1 );
 has hosts => (
     is       => 'rw',
     isa      => 'StrList',
@@ -54,20 +78,19 @@ use File::Basename;
 use Template;
 
 GetOptions(
-  "c|config=s"   => \( my $configfile = 'webchecks.ini' ),
-  "d|debug"      => \( my $debug = 0 ),
-  "t|template=s" => \( my $template = 'nagios-webchecks.tt'),
+    "c|config=s"   => \( my $configfile = 'webchecks.ini' ),
+    "d|debug"      => \( my $debug = 0 ),
+    "t|template=s" => \( my $template = 'nagios-webchecks.tt'),
 );
 
 my $config = get_configs();
 
 my $tt = Template->new();
 
-$tt->process( $template, { checks => [ values %{ $config->{checks} } ],
-    sprintf => \&my_sprintf } )
-  || die $tt->error();
+$tt->process( $template, { 
+    checks => $config->checks, sprintf => \&my_sprintf,
+} ) || die $tt->error();
 
-#####################################################
 
 sub my_sprintf {
    my ($format, @args) = @_;
@@ -75,23 +98,26 @@ sub my_sprintf {
 }
 
 sub get_configs {
-  my $config = Config::Tiny->new();
-  $config = Config::Tiny->read( $configfile )
-    || die "Failed to open [$configfile]: $Config::Tiny::errstr\n";
+    my $config = Config::Tiny->new();
+    $config = Config::Tiny->read( $configfile )
+        || die "Failed to open [$configfile]: $Config::Tiny::errstr\n";
 
-  print Dump $config if $debug;
-  my %parsed;
-  
-  for my $section ( keys %$config ) {
-      my ($type, $name) = split /::/, $section, 2;
-      my $class = ucfirst $type;
-      my $object = $class->new( { %{ $config->{$section} }, name => $name });
-      $parsed{$type}{$name} = $object;
-  }
+    print Dump $config if $debug;
 
-  print Dump \%parsed if $debug;
-  return \%parsed;
+    my $parsed = Config->new({ group => {}, check => {} });
+
+    for my $section ( keys %$config ) {
+        my ($type, $name) = split /::/, $section, 2;
+        my $class = ucfirst $type;
+        my $object = $class->new( {
+            %{ $config->{$section} },
+            name   => $name,
+            config => $parsed,
+        } );
+        $parsed->$type()->{$name} = $object;
+    }
+
+    print Dump $parsed if $debug;
+    return $parsed;
 }
-
-
 
