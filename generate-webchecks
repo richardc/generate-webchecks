@@ -11,93 +11,72 @@ subtype StrList, as 'ArrayRef[Str]';
 coerce  StrList, from Str, via { [ split /[, ]+/ ] };
 }
 
-package Config;
-use Moose;
-use MooseX::StrictConstructor;
-has 'group' => ( is => 'rw', isa => 'HashRef[Group]', required => 1 );
-has 'check' => ( is => 'rw', isa => 'HashRef[Check]', required => 1 );
-__PACKAGE__->meta->make_immutable;
-no Moose;
+use MooseX::Declare;
+class MyConfig {
+    use MooseX::StrictConstructor;
+    has 'group' => ( is => 'rw', isa => 'HashRef[Group]', default => sub { {} } );
+    has 'check' => ( is => 'rw', isa => 'HashRef[Check]', default => sub { {} } );
 
-sub groups {
-    my $self = shift;
-    return [ values %{ $self->group } ];
-}
+    method groups { [ values %{ $self->group } ] }
+    method checks { [ values %{ $self->check } ] }
 
-sub checks {
-    my $self = shift;
-    return [ values %{ $self->check } ];
-}
+    method load ($configfile) {
+        my $config = Config::Tiny->read( $configfile )
+            || die "Failed to open [$configfile]: $Config::Tiny::errstr\n";
 
-sub new_from_file {
-    my $class = shift;
-    my $configfile = shift;
-    my $config = Config::Tiny->read( $configfile )
-        || die "Failed to open [$configfile]: $Config::Tiny::errstr\n";
-
-    my $self = $class->new({ group => {}, check => {} });
-
-    for my $section ( keys %$config ) {
-        my ($type, $name) = split /::/, $section, 2;
-        my $class = ucfirst $type;
-        my $object = $class->new( {
-            %{ $config->{$section} },
-            name   => $name,
-            config => $self,
-        } );
-        $self->$type()->{$name} = $object;
+        for my $section ( keys %$config ) {
+            my ($type, $name) = split /::/, $section, 2;
+            my $class = ucfirst $type;
+            my $object = $class->new( {
+                %{ $config->{$section} },
+                name   => $name,
+                config => $self,
+            } );
+            $self->$type()->{$name} = $object;
+        }
+        return $self;
     }
-
-    return $self;
 }
 
-package Section;
-use Moose;
-use MooseX::StrictConstructor;
-has 'name'    => ( is => 'ro', isa => 'Str', required => 1 );
-has 'config'  => ( is => 'ro', isa => 'Config', required => 1 );
-__PACKAGE__->meta->make_immutable;
-no Moose;
-
-package Check;
-use Moose;
-use MooseX::StrictConstructor;
-use Types ':all';
-
-extends 'Section';
-has 'command' => ( is => 'rw', isa => 'Str', required => 1 );
-has 'group' => (
-    is       => 'rw',
-    isa      => StrList,
-    coerce   => 1,
-    required => 1,
-);
-__PACKAGE__->meta->make_immutable;
-no Moose;
-
-sub groups {
-    my $self = shift;
-    return [ map { $self->config->group->{$_} } @{ $self->group }]
-}
-sub hosts {
-    my $self = shift;
-    return [ map { @{ $_->hosts } } @{ $self->groups } ];
+class Section {
+    use MooseX::StrictConstructor;
+    has 'name'    => ( is => 'ro', isa => 'Str', required => 1 );
+    has 'config'  => ( is => 'ro', isa => 'MyConfig', required => 1 );
 }
 
-package Group;
-use Moose;
-use MooseX::StrictConstructor;
-use Types ':all';
+class Check extends Section {
+    use MooseX::StrictConstructor;
+    use Types ':all';
+    
+    has 'command' => ( is => 'rw', isa => 'Str', required => 1 );
+    has 'group' => (
+        is       => 'rw',
+        isa      => StrList,
+        coerce   => 1,
+        required => 1,
+    );
 
-extends 'Section';
-has hosts => (
-    is       => 'rw',
-    isa      => StrList,
-    coerce   => 1,
-    required => 1,
-);
-__PACKAGE__->meta->make_immutable;
-no Moose;
+    method groups {
+        return [ map { $self->config->group->{$_} } @{ $self->group }];
+    }
+    method hosts {
+        return [ map { @{ $_->hosts } } @{ $self->groups } ];
+    }
+}
+
+class Group extends Section {
+    use MooseX::StrictConstructor;
+    use Types ':all';
+
+    has hosts => (
+        is       => 'rw',
+        isa      => StrList,
+        coerce   => 1,
+        required => 1,
+    );
+}
+no MooseX::Declare;
+
 
 
 package main;
@@ -116,7 +95,7 @@ GetOptions(
     "t|template=s" => \( my $template = 'nagios-webchecks.tt'),
 );
 
-my $config = Config->new_from_file( $configfile );
+my $config = MyConfig->new->load( $configfile );
 
 my $tt = Template->new();
 
