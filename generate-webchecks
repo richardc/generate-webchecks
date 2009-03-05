@@ -81,19 +81,14 @@ sub get_configs {
 
   print Dump $config if $debug;
   my %parsed;
+  
+  for my $section ( keys %$config ) {
+      my ($type, $name) = split /::/, $section, 2;
+      my $class = ucfirst $type;
+      my $object = $class->new( { %{ $config->{$section} }, name => $name });
+      $parsed{$type}{$name} = $object;
+  }
 
-  for my $group ( sort grep { /^group::/ } keys %$config ) {
-      $group =~ m{^group::(.*)};
-      my $obj = Group->new( { %{ $config->{$group} }, name => $1 } );
-      $parsed{group}{ $obj->name } = $obj;
-  }
-  for my $name ( sort grep { /^check::/ } keys %$config ) {
-    $name =~ m{^check::(.*)};
-    my $check = Check->new( { %{ $config->{$name} }, name => $1 } );
-    $parsed{check}{ $check->name } = $check;
-  }
-  
-  
   print Dump \%parsed if $debug;
   return \%parsed;
 }
