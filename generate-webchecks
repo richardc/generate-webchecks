@@ -28,6 +28,27 @@ sub checks {
     return [ values %{ $self->check } ];
 }
 
+sub new_from_file {
+    my $class = shift;
+    my $configfile = shift;
+    my $config = Config::Tiny->read( $configfile )
+        || die "Failed to open [$configfile]: $Config::Tiny::errstr\n";
+
+    my $self = $class->new({ group => {}, check => {} });
+
+    for my $section ( keys %$config ) {
+        my ($type, $name) = split /::/, $section, 2;
+        my $class = ucfirst $type;
+        my $object = $class->new( {
+            %{ $config->{$section} },
+            name   => $name,
+            config => $self,
+        } );
+        $self->$type()->{$name} = $object;
+    }
+
+    return $self;
+}
 
 package Section;
 use Moose;
@@ -87,7 +108,7 @@ GetOptions(
     "t|template=s" => \( my $template = 'nagios-webchecks.tt'),
 );
 
-my $config = get_configs();
+my $config = Config->new_from_file( $configfile );
 
 my $tt = Template->new();
 
@@ -95,33 +116,8 @@ $tt->process( $template, {
     checks => $config->checks, sprintf => \&my_sprintf,
 } ) || die $tt->error();
 
-
 sub my_sprintf {
    my ($format, @args) = @_;
    return sprintf $format, @args;
-}
-
-sub get_configs {
-    my $config = Config::Tiny->new();
-    $config = Config::Tiny->read( $configfile )
-        || die "Failed to open [$configfile]: $Config::Tiny::errstr\n";
-
-    print Dump $config if $debug;
-
-    my $parsed = Config->new({ group => {}, check => {} });
-
-    for my $section ( keys %$config ) {
-        my ($type, $name) = split /::/, $section, 2;
-        my $class = ucfirst $type;
-        my $object = $class->new( {
-            %{ $config->{$section} },
-            name   => $name,
-            config => $parsed,
-        } );
-        $parsed->$type()->{$name} = $object;
-    }
-
-    print Dump $parsed if $debug;
-    return $parsed;
 }
 
