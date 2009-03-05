@@ -12,7 +12,7 @@ no Moose::Util::TypeConstraints;
 
 package Config;
 use Moose;
-
+use MooseX::StrictConstructor;
 has 'group' => ( is => 'rw', isa => 'HashRef[Group]', required => 1 );
 has 'check' => ( is => 'rw', isa => 'HashRef[Check]', required => 1 );
 __PACKAGE__->meta->make_immutable;
@@ -52,6 +52,7 @@ sub new_from_file {
 
 package Section;
 use Moose;
+use MooseX::StrictConstructor;
 has 'name'    => ( is => 'ro', isa => 'Str', required => 1 );
 has 'config'  => ( is => 'ro', isa => 'Config', required => 1 );
 __PACKAGE__->meta->make_immutable;
@@ -59,6 +60,7 @@ no Moose;
 
 package Check;
 use Moose;
+use MooseX::StrictConstructor;
 extends 'Section';
 has 'command' => ( is => 'rw', isa => 'Str', required => 1 );
 has 'group' => (
@@ -81,6 +83,7 @@ sub hosts {
 
 package Group;
 use Moose;
+use MooseX::StrictConstructor;
 extends 'Section';
 has hosts => (
     is       => 'rw',
